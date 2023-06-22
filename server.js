@@ -185,7 +185,7 @@ async function consturctServer(moduleDefs) {
   /**
    * Cache
    */
-  app.use(cache('1 minutes', (_, res) => res.statusCode === 200))
+  app.use(cache('30', (_, res) => res.statusCode === 200))
 
   /**
    * Special Routers
