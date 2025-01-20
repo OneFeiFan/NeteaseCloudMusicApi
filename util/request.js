@@ -1,7 +1,7 @@
 const encrypt = require('./crypto')
 const crypto = require('crypto')
 const { default: axios } = require('axios')
-const { PacProxyAgent } = require('pac-proxy-agent')
+// const { PacProxyAgent } = require('pac-proxy-agent')
 const http = require('http')
 const https = require('https')
 const tunnel = require('tunnel')
@@ -141,26 +141,26 @@ const createRequest = (method, url, data = {}, options) => {
     if (options.crypto === 'eapi') settings.encoding = null
 
     if (options.proxy) {
-      if (options.proxy.indexOf('pac') > -1) {
-        settings.httpAgent = new PacProxyAgent(options.proxy)
-        settings.httpsAgent = new PacProxyAgent(options.proxy)
-      } else {
-        const purl = new URL(options.proxy)
-        if (purl.hostname) {
-          const agent = tunnel.httpsOverHttp({
-            proxy: {
-              host: purl.hostname,
-              port: purl.port || 80,
-            },
-          })
-          settings.httpsAgent = agent
-          settings.httpAgent = agent
-          settings.proxy = false
-        } else {
-          console.error('代理配置无效,不使用代理')
-        }
-      }
-    } else {
+      //   if (options.proxy.indexOf('pac') > -1) {
+      //     settings.httpAgent = new PacProxyAgent(options.proxy)
+      //     settings.httpsAgent = new PacProxyAgent(options.proxy)
+      //   } else {
+      //     const purl = new URL(options.proxy)
+      //     if (purl.hostname) {
+      //       const agent = tunnel.httpsOverHttp({
+      //         proxy: {
+      //           host: purl.hostname,
+      //           port: purl.port || 80,
+      //         },
+      //       })
+      //       settings.httpsAgent = agent
+      //       settings.httpAgent = agent
+      //       settings.proxy = false
+      //     } else {
+      //       console.error('代理配置无效,不使用代理')
+      //     }
+      //   }
+      // } else {
       settings.proxy = false
     }
     if (options.crypto === 'eapi') {
