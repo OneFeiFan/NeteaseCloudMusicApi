@@ -6,6 +6,7 @@ const http = require('http')
 const https = require('https')
 // const tunnel = require('tunnel')
 // const { URLSearchParams, URL } = require('url')
+import 'url-search-params-polyfill'
 const config = require('../util/config.json')
 // request.debug = true // 开启可看到更详细信息
 
