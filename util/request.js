@@ -5,7 +5,7 @@ const { default: axios } = require('axios')
 const http = require('http')
 const https = require('https')
 const tunnel = require('tunnel')
-const { URLSearchParams, URL } = require('url')
+// const { URLSearchParams, URL } = require('url')
 const config = require('../util/config.json')
 // request.debug = true // 开启可看到更详细信息
 
@@ -43,8 +43,34 @@ const chooseUserAgent = (ua = false) => {
     ? realUserAgentList[Math.floor(Math.random() * realUserAgentList.length)]
     : ua
 }
+const cache = {
+  get: (key) => {
+    const cacheData = uni.getStorageSync(key)
+    if (cacheData && cacheData.expire > Date.now()) {
+      return cacheData.data
+    }
+    return null
+  },
+  set: (key, data, duration = 30000) => {
+    // 默认缓存时间为30秒
+    const cacheData = {
+      data: data,
+      expire: Date.now() + duration,
+    }
+    uni.setStorageSync(key, cacheData)
+  },
+}
 const createRequest = (method, url, data = {}, options) => {
   return new Promise((resolve, reject) => {
+    const cacheKey = `cache_${url}_${JSON.stringify(data)}`
+
+    // 检查缓存
+    const cachedData = cache.get(cacheKey)
+    if (cachedData) {
+      console.log('[Cache]', url)
+      resolve(cachedData)
+      return
+    }
     let headers = { 'User-Agent': chooseUserAgent(options.ua) }
     if (method.toUpperCase() === 'POST')
       headers['Content-Type'] = 'application/x-www-form-urlencoded'
@@ -128,6 +154,7 @@ const createRequest = (method, url, data = {}, options) => {
       data = encrypt.eapi(options.url, data)
       url = url.replace(/\w*api/, 'eapi')
     }
+
     const answer = { status: 500, body: {}, cookie: [] }
     let settings = {
       method: method,
@@ -136,6 +163,10 @@ const createRequest = (method, url, data = {}, options) => {
       data: new URLSearchParams(data).toString(),
       httpAgent: new http.Agent({ keepAlive: true }),
       httpsAgent: new https.Agent({ keepAlive: true }),
+      crossDomain: true,
+      xhrFields: {
+        withCredentials: true, // 前端设置是否带cookie
+      },
     }
 
     if (options.crypto === 'eapi') settings.encoding = null
@@ -169,49 +200,67 @@ const createRequest = (method, url, data = {}, options) => {
         responseType: 'arraybuffer',
       }
     }
-    axios(settings)
-      .then((res) => {
-        const body = res.data
-        answer.cookie = (res.headers['set-cookie'] || []).map((x) =>
-          x.replace(/\s*Domain=[^(;|$)]+;*/, ''),
-        )
+
+    uni.request({
+      url: settings.url,
+      method: settings.method || 'GET', // 默认为GET
+      data: settings.data,
+      header: settings.headers,
+      timeout: settings.timeout || 60000, // 默认超时时间为60000ms
+      dataType: settings.responseType === 'json' ? 'json' : 'text', // 默认dataType为json
+      success: (res) => {
         try {
+          const body = res.data
+          let answer = {
+            body: body,
+            cookie: (res.header['Set-Cookie'] || []).map((x) =>
+              x.replace(/\s*Domain=[^(;|$)]+;*/, ''),
+            ),
+            status: res.statusCode,
+          }
+
           if (options.crypto === 'eapi') {
             answer.body = JSON.parse(encrypt.decrypt(body).toString())
           } else {
             answer.body = body
           }
 
-          answer.status = answer.body.code || res.status
+          answer.status = answer.body.code || res.statusCode
           if (
             [201, 302, 400, 502, 800, 801, 802, 803].indexOf(answer.body.code) >
             -1
           ) {
-            // 特殊状态码
-            answer.status = 200
+            answer.status = 200 // 特殊状态码处理
+          }
+
+          if (100 < answer.status && answer.status < 600) {
+            // 缓存响应
+            cache.set(cacheKey, answer, 30000) // 默认缓存时间为30秒
+            resolve(answer)
+          } else {
+            reject(answer)
           }
         } catch (e) {
-          // console.log(e)
           try {
-            answer.body = JSON.parse(body.toString())
+            answer.body = JSON.parse(res.data.toString())
           } catch (err) {
-            // console.log(err)
-            // can't decrypt and can't parse directly
-            answer.body = body
+            answer.body = res.data
           }
-          answer.status = res.status
+          answer.status = res.statusCode || 400
+          reject(answer)
         }
-
-        answer.status =
-          100 < answer.status && answer.status < 600 ? answer.status : 400
-        if (answer.status === 200) resolve(answer)
-        else reject(answer)
-      })
-      .catch((err) => {
-        answer.status = 502
-        answer.body = { code: 502, msg: err }
+      },
+      fail: (err) => {
+        const answer = {
+          status: 502,
+          body: { code: 502, msg: err.errMsg },
+        }
         reject(answer)
-      })
+      },
+      complete: () => {
+        // 可以添加一些请求结束后的处理逻辑
+      },
+    })
   })
 }
 
