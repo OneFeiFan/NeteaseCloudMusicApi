@@ -48,7 +48,7 @@ const cache = {
   get: (key) => {
     const cacheData = uni.getStorageSync(key)
     if (cacheData && cacheData.expire > Date.now()) {
-      return cacheData.data
+      return JSON.parse(cacheData.data)
     }
     return null
   },
