@@ -48,7 +48,7 @@ const cache = {
   get: (key) => {
     const cacheData = uni.getStorageSync(key)
     if (cacheData && cacheData.expire > Date.now()) {
-      return JSON.parse(cacheData.data)
+      return cacheData.data
     }
     return null
   },
@@ -212,6 +212,7 @@ const createRequest = (method, url, data = {}, options) => {
       success: (res) => {
         try {
           const body = res.data
+
           let answer = {
             body: body,
             cookie: (res.header['Set-Cookie'] || []).map((x) =>
@@ -224,6 +225,9 @@ const createRequest = (method, url, data = {}, options) => {
             answer.body = JSON.parse(encrypt.decrypt(body).toString())
           } else {
             answer.body = body
+            if (typeof body === 'string') {
+              answer.body = JSON.parse(body)
+            }
           }
 
           answer.status = answer.body.code || res.statusCode
