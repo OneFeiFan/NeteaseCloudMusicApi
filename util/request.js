@@ -7,6 +7,7 @@ const https = require('https')
 // const tunnel = require('tunnel')
 // const { URLSearchParams, URL } = require('url')
 import 'url-search-params-polyfill'
+
 const config = require('../util/config.json')
 // request.debug = true // 开启可看到更详细信息
 
@@ -201,33 +202,25 @@ const createRequest = (method, url, data = {}, options) => {
         responseType: 'arraybuffer',
       }
     }
-
     uni.request({
       url: settings.url,
       method: settings.method || 'GET', // 默认为GET
       data: settings.data,
       header: settings.headers,
       timeout: settings.timeout || 60000, // 默认超时时间为60000ms
-      dataType: settings.responseType === 'json' ? 'json' : 'text', // 默认dataType为json
+      responseType:
+        settings.responseType === 'arraybuffer' ? 'arraybuffer' : 'json',
       success: (res) => {
+        const body = res.data
+        // console.log(settings.headers['Cookie'])
+        answer.cookie = (settings.headers['Cookie'].split(';') || []).map((x) =>
+          x.replace(/\s*Domain=[^(;|$)]+;*/, ''),
+        )
         try {
-          const body = res.data
-
-          let answer = {
-            body: body,
-            cookie: (res.header['Set-Cookie'] || []).map((x) =>
-              x.replace(/\s*Domain=[^(;|$)]+;*/, ''),
-            ),
-            status: res.statusCode,
-          }
-
           if (options.crypto === 'eapi') {
             answer.body = JSON.parse(encrypt.decrypt(body).toString())
           } else {
             answer.body = body
-            if (typeof body === 'string') {
-              answer.body = JSON.parse(body)
-            }
           }
 
           answer.status = answer.body.code || res.statusCode
@@ -235,25 +228,28 @@ const createRequest = (method, url, data = {}, options) => {
             [201, 302, 400, 502, 800, 801, 802, 803].indexOf(answer.body.code) >
             -1
           ) {
-            answer.status = 200 // 特殊状态码处理
-          }
-
-          if (100 < answer.status && answer.status < 600) {
-            // 缓存响应
-            cache.set(cacheKey, answer, 30000) // 默认缓存时间为30秒
-            resolve(answer)
-          } else {
-            reject(answer)
+            // 特殊状态码
+            answer.status = 200
           }
         } catch (e) {
+          // console.log(e)
           try {
-            answer.body = JSON.parse(res.data.toString())
+            const utf8decoder = new TextDecoder('utf-8')
+            // console.log(utf8decoder.decode(body));
+            answer.body = JSON.parse(utf8decoder.decode(body))
           } catch (err) {
-            answer.body = res.data
+            // console.log(err)
+            // can't decrypt and can't parse directly
+            answer.body = body
           }
-          answer.status = res.statusCode || 400
-          reject(answer)
+          answer.status = res.statusCode
         }
+        answer.status =
+          100 < answer.status && answer.status < 600 ? answer.status : 400
+        if (answer.status === 200) {
+          // cache.set(cacheKey, answer, 30000) // 默认缓存时间为30秒
+          resolve(answer)
+        } else reject(answer)
       },
       fail: (err) => {
         const answer = {
